@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:insurance/components/value_slider.dart';
+import 'package:insurance/components/value_select.dart';
 import 'package:insurance/components/form_item.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 
@@ -13,7 +13,8 @@ class _MainState extends State<Main> {
   static final int minAge = 0, maxAge = 30;
   int age = minAge;
 
-  bool sex = false;
+  static final int minSex = 0, maxSex = 1;
+  int sex = minSex;
 
   static final int minTimeLimit = 0, maxTimeLimit = 4;
   int timeLimit = minTimeLimit;
@@ -41,7 +42,7 @@ class _MainState extends State<Main> {
   void onQuery() {
     try {
       var table = spreadsheetDecoder.tables[timeLimit.toString()];
-      var value = table.rows[age][feeLimit * 2 + (sex ? 0 : 1)];
+      var value = table.rows[age][feeLimit * 2 + sex];
       this.setState(() {
         debugPrint(value.toString());
         result = value;
@@ -58,7 +59,7 @@ class _MainState extends State<Main> {
     }
     return Scaffold(
       appBar: AppBar(
-        title: const Text("保费查询"),
+        title: const Text("保了么"),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -67,46 +68,47 @@ class _MainState extends State<Main> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               FormItem(
-                title: "投保年龄",
-                content: ValueSlider(
-                  value: age,
-                  min: minAge,
-                  max: maxAge,
+                  title: "投保年龄",
+                  content: Row(
+                    children: <Widget>[
+                      Text("${age + 25} 岁   "),
+                      RaisedButton(
+                        child: const Text("选择出生日期"),
+                        onPressed: () async {
+                          final now = DateTime.now();
+                          var date = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime(now.year - maxAge - 25),
+                              firstDate: DateTime(now.year - maxAge - 25),
+                              lastDate: DateTime(now.year - minAge - 25));
+                          if (date != null) {
+                            this.setState(() {
+                              age = now.year - date.year - 25;
+                            });
+                          }
+                        },
+                      )
+                    ],
+                  )),
+              FormItem(
+                title: "性        别",
+                content: ValueSelect(
+                  value: sex,
+                  min: minSex,
+                  max: maxSex,
                   buildText: (v) {
-                    return "${v + 25} 岁";
+                    return v == 0 ? "男性" : "女性";
                   },
                   onChange: (v) {
                     this.setState(() {
-                      age = v;
+                      sex = v;
                     });
                   },
                 ),
               ),
               FormItem(
-                title: "性        别",
-                content: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: <Widget>[
-                    Container(
-                      width: 55,
-                      child: Text(sex ? "男性" : "女性"),
-                    ),
-                    Expanded(
-                      child: Switch(
-                        value: sex,
-                        onChanged: (v) {
-                          this.setState(() {
-                            sex = v;
-                          });
-                        },
-                      ),
-                    )
-                  ],
-                ),
-              ),
-              FormItem(
                 title: "保障期限",
-                content: ValueSlider(
+                content: ValueSelect(
                   value: timeLimit,
                   min: minTimeLimit,
                   max: maxTimeLimit,
@@ -126,7 +128,7 @@ class _MainState extends State<Main> {
               ),
               FormItem(
                 title: "缴费期限",
-                content: ValueSlider(
+                content: ValueSelect(
                   value: feeLimit,
                   min: minFeeLimit,
                   max: maxFeeLimit,
@@ -157,7 +159,7 @@ class _MainState extends State<Main> {
               ),
               FormItem(
                 title: "保障额度",
-                content: ValueSlider(
+                content: ValueSelect(
                   value: amount,
                   min: minAmount,
                   max: maxAmount,
