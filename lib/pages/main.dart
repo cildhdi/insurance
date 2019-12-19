@@ -2,7 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:insurance/components/value_select.dart';
 import 'package:insurance/components/form_item.dart';
+import 'package:insurance/pages/util.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+
+//sex -> timeLimit -> feeLimit
+Map<int, Map<int, Map<int, String>>> loc = {
+  0: {
+    0: {0: "O", 1: "T", 2: "Y"},
+    1: {0: "AE", 1: "AJ", 2: "AO", 3: "AT"},
+    2: {0: "AZ", 1: "BE", 2: "BJ", 3: "BO"},
+    3: {0: "BT", 1: "BY", 2: "CD", 3: "CI"},
+    4: {0: "CN", 1: "CS", 2: "CX", 3: "DC"}
+  },
+  1: {
+    0: {0: "O", 1: "T", 2: "Y"},
+    1: {0: "AF", 1: "AK", 2: "AP", 3: "AU"},
+    2: {0: "BB", 1: "BG", 2: "BL", 3: "BP"},
+    3: {0: "BV", 1: "CA", 2: "CF", 3: "CK"},
+    4: {0: "CQ", 1: "CV", 2: "DA", 3: "DF"}
+  }
+};
+
+int timeLimitToRange(int tl) {
+  if (tl <= 2) {
+    return (tl + 1) * 10;
+  } else {
+    return tl == 3 ? 35 : 45;
+  }
+}
 
 class Main extends StatefulWidget {
   @override
@@ -26,13 +53,16 @@ class _MainState extends State<Main> {
   int amount = minAmount;
 
   double result;
-  SpreadsheetDecoder spreadsheetDecoder;
+  var values = new List<double>();
+  SpreadsheetDecoder spreadsheetDecoder, respXlsx;
 
   Future<void> loadXlsx(BuildContext context) async {
     try {
       var bytes = await rootBundle.load("assets/insurance.xlsx");
       spreadsheetDecoder =
           SpreadsheetDecoder.decodeBytes(bytes.buffer.asUint8List());
+      bytes = await rootBundle.load("assets/in2.xlsx");
+      respXlsx = SpreadsheetDecoder.decodeBytes(bytes.buffer.asUint8List());
       debugPrint("加载表格成功");
     } catch (e) {
       debugPrint("加载表格失败");
@@ -43,13 +73,49 @@ class _MainState extends State<Main> {
     try {
       var table = spreadsheetDecoder.tables[timeLimit.toString()];
       var value = table.rows[age][feeLimit * 2 + sex];
+
+      table = respXlsx.tables[sex.toString()];
+      //($O$29*($I$29-I29)/H29-($L$29-L29)/H29)*100000
+      //($O$29*($I$29-I30)/H30-($L$29-L30)/H30)*100000
+
+      //($O$29*($I$29-I29)/H29-($L$29-L29)/H29)*100000
+      //($T$29*($I$29-I29)/H29-($L$29-L29)/H29)*100000
+
+      double pureFee = table.rows[ageToIndex(age)]
+          [columnToIndex(loc[sex][timeLimit][feeLimit])];
+
+      var Iage = table.rows[ageToIndex(age)][columnToIndex("I")];
+      var Lage = table.rows[ageToIndex(age)][columnToIndex("L")];
+
+      debugPrint(Iage.toString());
+      debugPrint(Lage.toString());
+
+      values.clear();
+      int range = timeLimitToRange(timeLimit);
+      for (var i = ageToIndex(age); i <= ageToIndex(age) + range; i++) {
+        var v = (pureFee *
+                    (Iage - table.rows[i][columnToIndex("I")]) /
+                    table.rows[i][columnToIndex("H")] -
+                (Lage - table.rows[i][columnToIndex("L")]) /
+                    table.rows[i][columnToIndex("H")]) *
+            (amount + 1) *
+            100000;
+        values.add(v);
+      }
       this.setState(() {
-        debugPrint(value.toString());
         result = value;
       });
     } catch (e) {
       debugPrint(e.toString());
     }
+  }
+
+  void setValue(void Function() fn) {
+    this.setState(() {
+      result = null;
+      values.clear();
+      fn();
+    });
   }
 
   @override
@@ -82,7 +148,7 @@ class _MainState extends State<Main> {
                               firstDate: DateTime(now.year - maxAge - 25),
                               lastDate: DateTime(now.year - minAge - 25));
                           if (date != null) {
-                            this.setState(() {
+                            this.setValue(() {
                               age = now.year - date.year - 25;
                             });
                           }
@@ -100,7 +166,7 @@ class _MainState extends State<Main> {
                     return v == 0 ? "男性" : "女性";
                   },
                   onChange: (v) {
-                    this.setState(() {
+                    this.setValue(() {
                       sex = v;
                     });
                   },
@@ -120,7 +186,7 @@ class _MainState extends State<Main> {
                     }
                   },
                   onChange: (v) {
-                    this.setState(() {
+                    this.setValue(() {
                       timeLimit = v;
                     });
                   },
@@ -151,7 +217,7 @@ class _MainState extends State<Main> {
                     }
                   },
                   onChange: (v) {
-                    this.setState(() {
+                    this.setValue(() {
                       feeLimit = v;
                     });
                   },
@@ -167,7 +233,7 @@ class _MainState extends State<Main> {
                     return "${(v + 1) * 10} 万元";
                   },
                   onChange: (v) {
-                    this.setState(() {
+                    this.setValue(() {
                       amount = v;
                     });
                   },
@@ -188,6 +254,20 @@ class _MainState extends State<Main> {
                     : "${(result * (amount + 1) * 100).round()} 元",
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.display1,
+              ),
+              Text(
+                "责任准备金：",
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.display1,
+              ),
+              Column(
+                children: values.map((v) {
+                  return ListTile(
+                      title: Text(
+                    v.toInt().toString(),
+                    textAlign: TextAlign.center,
+                  ));
+                }).toList(),
               )
             ],
           ),
